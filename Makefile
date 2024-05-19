@@ -18,7 +18,7 @@ shell:
 	$(BIN) bash
 
 pre_install:
-	$(BIN) ansible-playbook -i /inventory/inventory.ini /ansible/pre_install.yaml
+	$(BIN) ansible-playbook -i /inventory/inventory.ini /ansible/promtail.yaml
 
 install:
 	$(BIN) ansible-playbook -i /inventory/inventory.ini cluster.yml --skip-tags=multus -b
@@ -29,5 +29,3 @@ uninstall:
 upgrade_cluster:
 	$(BIN) ansible-playbook -i /inventory/inventory.ini upgrade-cluster.yml --skip-tags=multus -e kube_version=$(KUBE_VERSION) -e upgrade_cluster_setup=true -b -l $(NODE)
 
-docker_to_containerd:
-	$(BIN) ansible-playbook -i /inventory/inventory.ini cluster.yml -l $(NODE) -e kube_version=$(KUBE_VERSION) -b

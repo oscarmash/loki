@@ -1,8 +1,9 @@
-# **Índice**
+# **Tacle of Contents**
 * [Cosas personales](#id1)
 * [Instalación de K8S](#id2)
-* [Instalación de HELMS - Bootstrap ](#id3)
-* [Instalación de HELMS - Stack Loki ](#id4)
+* [Instalación de HELMS - Bootstrap](#id3)
+* [Instalación de HELMS - Stack Loki](#id4)
+* [Logs customs](#id5)
 
 # Start / Stop VM <div id='id1' />
 
@@ -221,7 +222,7 @@ Fatal glibc error: CPU does not support x86-64-v2
 
 ### Instalación minio
 
-Crear el directorio en los workers:
+Crear el directorio en los workers, ya que en este caso no usaremos un storage compartido, se usará el storage local de cada worker de K8S:
 
 ```
 mkdir /disk-local-minio-data
@@ -499,7 +500,6 @@ config:
          password: loki-gateway-password
 ```
 
-
 ```
 helm upgrade --install \
 promtail grafana/promtail \
@@ -576,3 +576,90 @@ Configuramos el Data Source:
 * Password: loki-gateway-password
 
 Importar Dashboard: [15141](https://grafana.com/grafana/dashboards/15141-kubernetes-service-logs/)
+
+# Logs customs <div id='id5' />
+
+**A partir de aquí todo son pruebas**
+
+
+En cada "worker" + "control plane" crearemos los directorios:
+
+```
+$ mkdir -p /var/log/kubernetes/sites_logs && mkdir /var/log/messages
+```
+
+## Opción 1
+
+_La idea sería que el porpio HELM de promtail cogiera los logs y los guardase_
+
+```
+$ vim values-promtail.yaml
+config:
+  clients:
+   - url: http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push
+     basic_auth:
+        username: loki-gateway
+        password: loki-gateway-password
+
+  snippets:
+    extraScrapeConfigs: |
+      - job_name: sites-logs
+        static_configs:
+          - targets:
+              - localhost
+            labels:
+              job: <server>_varlogs
+              __path__: /sites_log/*.log
+
+extraVolumes:
+  - name: sites-logs
+    hostPath:
+      path: /var/log/kubernetes/sites_logs
+      type: Directory
+extraVolumeMounts:
+  - name: sites-logs
+    mountPath: /sites_logs
+```
+
+```
+helm upgrade --install \
+promtail grafana/promtail \
+--create-namespace \
+--namespace promtail \
+--version=6.15.5 \
+-f values-promtail.yaml
+```
+
+```
+root@diba-master:~# kubectl -n promtail delete pods --all
+```
+
+```
+root@diba-master:~# kubectl -n promtail get pods -o wide | grep master
+promtail-nt5bc   1/1     Running   0          2m20s   10.38.31.16   diba-master     <none>           <none>
+
+root@diba-master:~# echo "hoooola" > /var/log/kubernetes/sites_logs/test.log
+
+root@diba-master:~# kubectl -n promtail exec -it promtail-nt5bc -- cat /sites_logs/test.log
+hoooola
+```
+
+Accedemos a [Grafana](http://172.26.0.32:3000) (está ubicado fuera del cluster de K8S)
+
+Continuarà.........................
+
+## Opción v2
+
+_La idea sería instalar el promtail via ansible, crear otro loki para esta necesidad y ponerlo en otro bucket del Minio (no es neceasrio desplegar otro minio)_
+
+
+
+Descarga de  [promtail](https://github.com/grafana/loki/releases/)
+
+```
+wget https://github.com/grafana/loki/releases/download/v2.9.8/promtail-linux-amd64.zip
+```
+
+El montaje sería tipo [este](https://psujit775.medium.com/how-to-setup-promtail-in-ubuntu-20-04-ed652b7c47c3), pero via Ansible
+
+Continuarà.........................
