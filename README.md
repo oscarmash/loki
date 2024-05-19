@@ -1,20 +1,7 @@
 # Start / Stop VM
 
 ```
-➜  ~ (ilimit-pro-oscar-mas:ilimit-loki) cd ilba/kubespray-diba
-direnv: loading ~/ilba/.envrc
-
- ██▓ ██▓     ▄▄▄▄    ▄▄▄
-▓██▒▓██▒    ▓█████▄ ▒████▄
-▒██▒▒██░    ▒██▒ ▄██▒██  ▀█▄
-░██░▒██░    ▒██░█▀  ░██▄▄▄▄██
-░██░░██████▒░▓█  ▀█▓ ▓█   ▓██▒
-░▓  ░ ▒░▓  ░░▒▓███▀▒ ▒▒   ▓▒█░
- ▒ ░░ ░ ▒  ░▒░▒   ░   ▒   ▒▒ ░
- ▒ ░  ░ ░    ░    ░   ░   ▒
- ░      ░  ░ ░            ░  ░
-                  ░
-➜  kubespray-diba (ilimit-pro-oscar-mas:ilimit-loki)   
+$ cd ilba/kubespray-diba
 ```
 
 ## Arrancar equipos
@@ -391,6 +378,11 @@ Hay que crear a mano el "Lifecycle Rules":
 helm repo add grafana https://grafana.github.io/helm-charts && helm repo update
 ```
 
+**NOTA:** No modificar las replicas del fichero _values-loki.yaml_, ya que son las mínimas que para que pueda funcionar.  
+Por ejemplo: si bajamos las réplicas del _backend_ a 1, después cuando configuremos Grafana, no funcionará y saldrá el siguiente error: 
+[Status: 500. Message: index gateway get ring: too many unhealthy instances in the ring](https://github.com/grafana/loki/issues/10537#issuecomment-1717322802)
+
+
 ```
 $ cat values-loki.yaml
 global:
@@ -443,7 +435,7 @@ gateway:
     password: loki-gateway-password
 
 backend:
-  replicas: 1
+  replicas: 3
   persistence:
     volumeClaimsEnabled: false
 ```
@@ -531,6 +523,8 @@ promtail-gr8kf   1/1     Running   0          4m55s
 promtail-mftxx   1/1     Running   0          4m55s
 promtail-pczlh   1/1     Running   0          4m55s
 ```
+
+Verificamos los logs de algún contenedor de promtail, para que no salga ningún error:
 
 ```
 root@diba-master:~# kubectl -n promtail logs -f promtail-gr8kf
