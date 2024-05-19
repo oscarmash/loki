@@ -2,7 +2,7 @@
 * [Cosas personales](#id1)
 * [Instalación de K8S](#id2)
 * [Instalación de HELMS - Bootstrap ](#id3)
-* [Instalación de HELMS - Stack Loki ](#id3)
+* [Instalación de HELMS - Stack Loki ](#id4)
 
 # Start / Stop VM <div id='id1' />
 
