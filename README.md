@@ -1,4 +1,10 @@
-# Start / Stop VM
+# **Índice**
+* [Cosas personales](#id1)
+* [Instalación de K8S](#id2)
+* [Instalación de HELMS - Bootstrap ](#id3)
+* [Instalación de HELMS - Stack Loki ](#id3)
+
+# Start / Stop VM <div id='id1' />
 
 ```
 $ cd ilba/kubespray-diba
@@ -22,7 +28,7 @@ LO HACES A MANO
 ssh 172.26.0.191
 ```
 
-# Kubernetes
+# Kubernetes <div id='id2' />
 
 ## Instalación
 
@@ -39,7 +45,7 @@ diba-master-2   Ready    <none>          3m3s    v1.28.6   172.26.0.193   <none>
 diba-master-3   Ready    <none>          3m1s    v1.28.6   172.26.0.194   <none>        Debian GNU/Linux 12 (bookworm)   6.1.0-21-amd64   containerd://1.7.1
 ```
 
-# Instalación de HELMS
+# Instalación de HELMS <div id='id3' />
 
 ## Instalar Helm
 
@@ -197,7 +203,7 @@ Verificamos que funcione:
 
 ![alt text](images/kubernetes-Hello-world.png)
 
-# Instalación del stack de Loki
+# Instalación del stack de Loki <div id='id4' />
 
 ## MinIO
 
