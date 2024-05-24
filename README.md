@@ -4,6 +4,7 @@
 * [Instalación de HELMS - Bootstrap](#id3)
 * [Instalación de HELMS - Stack Loki](#id4)
 * [Logs customs](#id5)
+* [Backups con Restic y MinIO](#id6)
 
 # Start / Stop VM <div id='id1' />
 
@@ -663,3 +664,53 @@ wget https://github.com/grafana/loki/releases/download/v2.9.8/promtail-linux-amd
 El montaje sería tipo [este](https://psujit775.medium.com/how-to-setup-promtail-in-ubuntu-20-04-ed652b7c47c3), pero via Ansible
 
 Continuarà.........................
+
+# Backups con Restic y MinIO <div id='id6' />
+
+**Esto no es para hacer backups de MinIO, es para hacer backups de tus ficheros y subirlos a MinIO**
+
+Información sacada de: https://blog.min.io/back-up-restic-minio/
+
+```
+root@diba-master:~# apt update && apt install restic
+root@diba-master:~# restic self-update
+```
+
+Creamos las Keys desde la consola GUI de MinIO:
+* URL: [console-minio.ilba.cat](http://console-minio.ilba.cat)
+* Username: admin
+* Password: admin-password
+
+![alt text](images/MinIO-create-keys.png)
+
+```
+ACCESS KEY: HiEYDAVmIeDtyQ7kYql8
+SECRET KEY: HFLdQMIRrsaCdDJTPfyjEXX1HnCtatDUxzZNhPbn
+```
+
+```
+root@diba-master:~# vim ~/.restic-env
+export AWS_ACCESS_KEY_ID=HiEYDAVmIeDtyQ7kYql8
+export AWS_SECRET_ACCESS_KEY=HFLdQMIRrsaCdDJTPfyjEXX1HnCtatDUxzZNhPbn
+export RESTIC_REPOSITORY="s3:http://api-minio.ilba.cat/restic"
+export RESTIC_PASSWORD="restic-password"
+
+root@diba-master:~# source ~/.restic-env
+
+root@diba-master:~# curl https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+root@diba-master:~# chmod 755 /usr/local/bin/mc
+
+root@diba-master:~# mc alias set myminio http://api-minio.ilba.cat $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY
+root@diba-master:~# mc admin info myminio
+```
+> **Note** El siguiente comando tarda muchísimo
+
+```
+root@diba-master:~# restic init
+```
+
+Verificaremos que nos ha creado el nuevo bucket llamado *restic*:
+
+![alt text](images/MinIO-restic.png)
+
+etc....
