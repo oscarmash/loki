@@ -890,3 +890,5 @@ root@diba-master:~# kubectl -n kube-system get pods | grep kube-proxy
 ```
 
 Verificamos que no haya ningún error:  [http://kps-prometheus.ilba.cat/targets?search=](http://kps-prometheus.ilba.cat/targets?search=)
+
+![alt text](images/prometheus.png)
