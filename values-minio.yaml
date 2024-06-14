@@ -1,0 +1,85 @@
+mode: distributed
+
+persistence:
+  enabled: false
+
+extraVolumes:
+  - name: minio-data
+    hostPath:
+      path: /disk-local-minio-data
+      type: Directory
+extraVolumeMounts:
+  - name: minio-data
+    mountPath: /export
+
+drivesPerNode: 1
+replicas: 3
+pools: 1
+
+ingress:
+  enabled: true
+  ingressClassName: "nginx"
+  labels: {}
+  annotations: {}
+  path: /
+  hosts:
+    - api-minio.ilba.cat
+  tls: []
+
+consoleIngress:
+  enabled: true
+  ingressClassName: "nginx"
+  labels: {}
+  annotations: {}
+  path: /
+  hosts:
+    - console-minio.ilba.cat
+  tls: []
+
+resources:
+  requests:
+    memory: 1Gi
+
+users:
+  - accessKey: admin
+    secretKey: admin-password
+    policy: consoleAdmin
+  - accessKey: loki
+    secretKey: loki-password
+    policy: loki-policy
+
+policies:
+- name: loki-policy
+  statements:
+    - resources:
+        - 'arn:aws:s3:::loki-*/*'
+      actions:
+        - "s3:AbortMultipartUpload"
+        - "s3:GetObject"
+        - "s3:DeleteObject"
+        - "s3:PutObject"
+        - "s3:ListMultipartUploadParts"
+    - resources:
+        - 'arn:aws:s3:::loki-*'
+      actions:
+        - "s3:CreateBucket"
+        - "s3:DeleteBucket"
+        - "s3:GetBucketLocation"
+        - "s3:ListBucket"
+        - "s3:ListBucketMultipartUploads"
+
+buckets:
+  - name: loki-chunks
+    policy: none
+    purge: false
+
+nodeAffinity:
+  required:
+    nodeSelectorTerms:
+    - matchExpressions:
+      - key: kubernetes.io/hostname
+        operator: In
+        values:
+        - diba-master-1
+        - diba-master-2
+        - diba-master-3

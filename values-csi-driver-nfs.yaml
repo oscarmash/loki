@@ -1,0 +1,8 @@
+externalSnapshotter:
+  enabled: true
+storageClass:
+  create: true
+  name: nfs-csi
+  parameters:
+    server: 172.26.0.195
+    share: /nfsshare/diba
