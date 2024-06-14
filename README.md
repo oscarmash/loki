@@ -6,6 +6,7 @@
 * [Logs customs](#id5)
 * [Backups con Restic y MinIO](#id6)
 * [Instalación de HELMS - NFS + KPS](#id7)
+* [Instalación de Velero](#id8)
 
 # Start / Stop VM <div id='id1' />
 
@@ -892,3 +893,161 @@ root@diba-master:~# kubectl -n kube-system get pods | grep kube-proxy
 Verificamos que no haya ningún error:  [http://kps-prometheus.ilba.cat/targets?search=](http://kps-prometheus.ilba.cat/targets?search=)
 
 ![alt text](images/prometheus.png)
+
+# Instalación de Velero <div id='id7' />
+
+## Montaje de MinIO (por si no lo tenemos)
+
+Recordemos que en Proxmox, la CPU ha de ser: "x86-64-v2-AES"
+
+```
+root@diba-minio:~# cat /etc/docker-compose/docker-compose.yaml
+version: '3'
+
+services:
+  minio:
+    container_name: minio
+    hostname: minio
+    image: minio/minio:RELEASE.2024-06-11T03-13-30Z
+    command: server /data --console-address ":9001"
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - minio_data:/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=superpassword
+
+volumes:
+  minio_data:
+    driver: local
+```
+
+Accedemos a la consola
+* URL: [http://172.26.0.196:9001/](http://172.26.0.196:9001)
+* Username: admin
+* Password: superpassword
+
+Crearemos el bucket:
+
+![alt text](images/MinIO-external-create-bucket.png)
+
+
+## Instalación de Velero
+
+Descargamos el binario de velero:
+
+```
+root@diba-master:~# wget https://github.com/vmware-tanzu/velero/releases/download/v1.13.2/velero-v1.13.2-linux-amd64.tar.gz
+root@diba-master:~# tar xzvf velero-v1.13.2-linux-amd64.tar.gz
+root@diba-master:~# mv velero-v1.13.2-linux-amd64/velero /usr/local/sbin/velero-v1.13.2-linux-amd64
+root@diba-master:~# ln -s /usr/local/sbin/velero-v1.13.2-linux-amd64 /usr/local/sbin/velero
+```
+
+Creamos el Token en el MinIO:
+
+![alt text](images/MinIO-external-token.png)
+
+```
+root@diba-master:~# cat <<EOF >> credentials-velero
+[default]
+aws_access_key_id = 1sIIyWpZqUIKGstjMMp8
+aws_secret_access_key = nHN5jtoouRddrkg01lE9dIs50QM7ddwsjbhF2IeZ
+EOF
+```
+
+Notas de instalación de velero:
+* Plugin para [AWS](https://github.com/vmware-tanzu/velero-plugin-for-aws?tab=readme-ov-file#compatibility)
+* Plugin para [CSI](https://github.com/vmware-tanzu/velero-plugin-for-csi?tab=readme-ov-file#compatibility)
+
+```
+velero install \
+--provider aws \
+--plugins velero/velero-plugin-for-aws:v1.9.2,velero/velero-plugin-for-csi:v0.7.1 \
+--bucket velero \
+--secret-file ./credentials-velero \
+--use-volume-snapshots=true \
+--backup-location-config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000
+```
+
+```
+root@diba-master:~# kubectl -n velero get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+velero-b89966d7b-mlvtv   1/1     Running   0          8m9s
+
+root@diba-master:~# velero version
+Client:
+        Version: v1.13.2
+        Git commit: 4d961fb6fec384ed7f3c1b7c65c818106107f5a6
+Server:
+        Version: v1.13.2
+```
+
+## Tests de Velero
+
+
+```
+root@diba-master:~# cat test-nfs.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: test-dynamic-volume-claim
+  namespace: default
+spec:
+  storageClassName: nfs-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 666Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - name: nfs-server
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: nfs-server
+    persistentVolumeClaim:
+      claimName: test-dynamic-volume-claim
+```
+
+```
+root@diba-master:~# kubectl apply -f test-nfs.yaml
+
+root@diba-master:~# kubectl exec -it nginx bash
+root@nginx:/# echo "Hello World ;-)" >  /usr/share/nginx/html/index.html
+root@nginx:/# exit
+
+root@diba-master:~# kubectl get pods -o wide
+NAME    READY   STATUS    RESTARTS   AGE     IP             NODE            NOMINATED NODE   READINESS GATES
+nginx   1/1     Running   0          2m38s   10.38.25.118   diba-master-1   <none>           <none>
+
+root@diba-master:~# curl 10.38.25.118
+Hello World ;-)
+```
+
+```
+velero backup create "backup-$(date +"%H-%M")" \
+--include-namespaces default
+```
+
+```
+root@diba-master:~# velero backup get
+NAME           STATUS            ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+backup-13-13   PartiallyFailed   1        0          2024-06-14 13:13:29 +0200 CEST   29d       default            <none>
+```
+
+Accedemos a la consola
+* URL: [http://172.26.0.196:9001/](http://172.26.0.196:9001)
+* Username: admin
+* Password: superpassword
