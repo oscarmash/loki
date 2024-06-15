@@ -7,6 +7,7 @@
 * [Backups con Restic y MinIO](#id6)
 * [Instalación de HELMS - NFS + KPS](#id7)
 * [Instalación de Velero](#id8)
+* [Instalación de CEPH RBD](#id9)
 
 # Start / Stop VM <div id='id1' />
 
@@ -894,7 +895,7 @@ Verificamos que no haya ningún error:  [http://kps-prometheus.ilba.cat/targets?
 
 ![alt text](images/prometheus.png)
 
-# Instalación de Velero <div id='id7' />
+# Instalación de Velero <div id='id8' />
 
 ## Montaje de MinIO (por si no lo tenemos)
 
@@ -935,6 +936,34 @@ Crearemos el bucket:
 ![alt text](images/MinIO-external-create-bucket.png)
 
 
+## Documenatción
+
+Documentación encontrada:
+
+* Velero is an open-source backup solution for Kubernetes, maintained by VMWare-Tanzu.
+* Velero backs-up Kubernetes resources and PV’s data into a backup storage location like AWS S3 bucket, or any cloud object storage. It uses restic or Kopia (Starting from velero 1.10) tool to upload data inside a persistent volume to object storage.
+* Using the appropriate CSI driver for your storage provides additional features like efficient snapshots and clones.
+
+Nuestro CSI ha de tener esto:
+
+* External Snapshotter
+* VolumeSnapshotClass CRD
+
+```
+root@diba-master:~# kubectl get crd | grep volumesnapshot
+volumesnapshotclasses.snapshot.storage.k8s.io         2024-06-14T05:41:38Z
+volumesnapshotcontents.snapshot.storage.k8s.io        2024-06-14T05:41:38Z
+volumesnapshotlocations.velero.io                     2024-06-14T17:20:46Z
+volumesnapshots.snapshot.storage.k8s.io               2024-06-14T05:41:38Z
+```
+
+```
+root@diba-master:~# kubectl api-resources | grep snapshot.storage
+volumesnapshotclasses             vsclass,vsclasses   snapshot.storage.k8s.io/v1             false        VolumeSnapshotClass
+volumesnapshotcontents            vsc,vscs            snapshot.storage.k8s.io/v1             false        VolumeSnapshotContent
+volumesnapshots                   vs                  snapshot.storage.k8s.io/v1             true         VolumeSnapshot
+```
+
 ## Instalación de Velero
 
 Descargamos el binario de velero:
@@ -965,17 +994,22 @@ Notas de instalación de velero:
 ```
 velero install \
 --provider aws \
+--features=EnableCSI \
 --plugins velero/velero-plugin-for-aws:v1.9.2,velero/velero-plugin-for-csi:v0.7.1 \
 --bucket velero \
 --secret-file ./credentials-velero \
 --use-volume-snapshots=true \
---backup-location-config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000
+--backup-location-config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000 \
+--use-node-agent
 ```
 
 ```
 root@diba-master:~# kubectl -n velero get pods
-NAME                     READY   STATUS    RESTARTS   AGE
-velero-b89966d7b-mlvtv   1/1     Running   0          8m9s
+NAME                      READY   STATUS    RESTARTS   AGE
+node-agent-2424t          1/1     Running   0          14s
+node-agent-4nk6j          1/1     Running   0          14s
+node-agent-64lbj          1/1     Running   0          14s
+velero-6d887568cd-tsckw   1/1     Running   0          14s
 
 root@diba-master:~# velero version
 Client:
@@ -983,6 +1017,16 @@ Client:
         Git commit: 4d961fb6fec384ed7f3c1b7c65c818106107f5a6
 Server:
         Version: v1.13.2
+```
+
+```
+root@diba-master:~# kubectl get sc
+NAME      PROVISIONER      RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+nfs-csi   nfs.csi.k8s.io   Delete          Immediate           false                  11h
+```
+
+```
+root@diba-master:~# kubectl annotate storageclass/nfs-csi storageclass.kubernetes.io/is-default-class=true
 ```
 
 ## Tests de Velero
@@ -1038,16 +1082,194 @@ Hello World ;-)
 
 ```
 velero backup create "backup-$(date +"%H-%M")" \
---include-namespaces default
+--include-namespaces default \
+--include-resources pvc,pv \
+--default-volumes-to-fs-backup
 ```
 
 ```
 root@diba-master:~# velero backup get
-NAME           STATUS            ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
-backup-13-13   PartiallyFailed   1        0          2024-06-14 13:13:29 +0200 CEST   29d       default            <none>
+NAME           STATUS      ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+backup-10-04   Completed   0        0          2024-06-15 10:04:10 +0200 CEST   29d       default            <none>
 ```
 
 Accedemos a la consola
 * URL: [http://172.26.0.196:9001/](http://172.26.0.196:9001)
 * Username: admin
 * Password: superpassword
+
+
+# Instalación de CEPH RBD <div id='id9' />
+
+
+Partimos de la base que tenemos un Ceph (AllInOne) montado y funcionando:
+
+```
+root@ceph-aio:~# ceph -s
+  cluster:
+    id:     7d2b3cca-f1eb-11ee-a886-593bc87d3824
+    health: HEALTH_OK
+            (muted: POOL_NO_REDUNDANCY)
+
+  services:
+    mon: 1 daemons, quorum ceph-aio (age 100s)
+    mgr: ceph-aio.iaeehz(active, since 48s)
+    osd: 3 osds: 3 up (since 59s), 3 in (since 10w)
+
+  data:
+    pools:   1 pools, 1 pgs
+    objects: 2 objects, 449 KiB
+    usage:   891 MiB used, 89 GiB / 90 GiB avail
+    pgs:     1 active+clean
+```
+
+```
+root@ceph-aio:~# ceph osd lspools
+1 .mgr
+
+root@ceph-aio:~# ceph mon dump | grep "fsid "
+dumped monmap epoch 1
+fsid 7d2b3cca-f1eb-11ee-a886-593bc87d3824
+
+root@ceph-aio:~# ceph mon dump | grep 6789
+dumped monmap epoch 1
+0: [v2:172.26.0.239:3300/0,v1:172.26.0.239:6789/0] mon.ceph-aio
+
+root@ceph-aio:~# ceph osd pool create pool-k8s 16
+root@ceph-aio:~# ceph osd pool set pool-k8s size 1 --yes-i-really-mean-it
+root@ceph-aio:~# rbd pool init pool-k8s
+root@ceph-aio:~# ceph health mute POOL_NO_REDUNDANCY
+
+root@ceph-aio:~# ceph osd lspools
+1 .mgr
+6 pool-k8s
+
+root@ceph-aio:~# ceph auth add client.k8s mon 'allow r' osd 'allow rwx pool=pool-k8s'
+root@ceph-aio:~# ceph auth get-key client.k8s
+AQB6Jm1mQz0hHBAAUEP8Fa2Kuk3s5SmRRPtFJQ==
+
+root@ceph-aio:~# ceph -s
+  cluster:
+    id:     7d2b3cca-f1eb-11ee-a886-593bc87d3824
+    health: HEALTH_OK
+            (muted: POOL_NO_REDUNDANCY)
+
+  services:
+    mon: 1 daemons, quorum ceph-aio (age 10m)
+    mgr: ceph-aio.iaeehz(active, since 10m)
+    osd: 3 osds: 3 up (since 10m), 3 in (since 10w)
+
+  data:
+    pools:   2 pools, 17 pgs
+    objects: 3 objects, 449 KiB
+    usage:   891 MiB used, 89 GiB / 90 GiB avail
+    pgs:     17 active+clean
+```
+
+```
+root@diba-master:~# helm repo add ceph-csi https://ceph.github.io/csi-charts
+root@diba-master:~# helm repo update
+
+root@diba-master:~# helm search repo ceph-csi/ceph-csi-rbd
+NAME                    CHART VERSION   APP VERSION     DESCRIPTION
+ceph-csi/ceph-csi-rbd   3.11.0          3.11.0          Container Storage Interface (CSI) driver, provi...
+
+root@diba-master:~# vim values-ceph-csi-rbd.yaml
+csiConfig:
+  - clusterID: "7d2b3cca-f1eb-11ee-a886-593bc87d3824"
+    monitors:
+      - "172.26.0.239:6789"
+
+storageClass:
+  create: true
+  name: csi-rbd-sc
+  clusterID: 7d2b3cca-f1eb-11ee-a886-593bc87d3824
+  pool: pool-k8s
+
+secret:
+  create: true
+  name: csi-rbd-secret
+  userID: k8s
+  userKey: AQB6Jm1mQz0hHBAAUEP8Fa2Kuk3s5SmRRPtFJQ==
+
+root@diba-master:~# helm upgrade --install ceph-csi-rbd \
+--create-namespace \
+--namespace ceph-csi \
+-f values-ceph-csi-rbd.yaml \
+--version=3.11.0 \
+ceph-csi/ceph-csi-rbd
+
+root@diba-master:~# helm -n ceph-csi ls
+NAME            NAMESPACE       REVISION        UPDATED                                         STATUS          CHART                   APP VERSION
+ceph-csi-rbd    ceph-csi        1               2024-06-15 07:50:20.956726143 +0200 CEST        deployed        ceph-csi-rbd-3.11.0     3.11.0
+
+root@diba-master:~# kubectl -n ceph-csi get pods
+NAME                                        READY   STATUS    RESTARTS   AGE
+ceph-csi-rbd-nodeplugin-6gvd2               3/3     Running   0          3m54s
+ceph-csi-rbd-nodeplugin-gmr4c               3/3     Running   0          3m54s
+ceph-csi-rbd-nodeplugin-t6nnp               3/3     Running   0          3m54s
+ceph-csi-rbd-provisioner-66d99f8ffb-8bl2k   7/7     Running   0          3m54s
+ceph-csi-rbd-provisioner-66d99f8ffb-jmrpq   7/7     Running   0          3m54s
+ceph-csi-rbd-provisioner-66d99f8ffb-rm2fg   7/7     Running   0          3m54s
+
+root@diba-master:~# kubectl get sc
+NAME                PROVISIONER        RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+csi-rbd-sc          rbd.csi.ceph.com   Delete          Immediate           true                   62s
+nfs-csi (default)   nfs.csi.k8s.io     Delete          Immediate           false                  24h
+```
+
+## Test velero con RBD
+
+```
+root@diba-master:~# kubectl create ns test-rbd
+
+root@diba-master:~# vim test-rbd.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: test-dynamic-volume-claim
+  namespace: test-rbd
+spec:
+  storageClassName: csi-rbd-sc
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  namespace: test-rbd
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - name: nfs-server
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: nfs-server
+    persistentVolumeClaim:
+      claimName: test-dynamic-volume-claim
+
+root@diba-master:~# kubectl apply -f test-rbd.yaml
+
+root@diba-master:~# kubectl -n test-rbd exec -it nginx -- df -h | grep rbd
+/dev/rbd0       2.0G   24K  1.9G   1% /usr/share/nginx/html
+```
+
+```
+velero backup create "backup-$(date +"%H-%M")" \
+--include-namespaces test-rbd \
+--include-resources pvc,pv \
+--default-volumes-to-fs-backup
+```
+
+```
+root@diba-master:~# velero backup get
+NAME           STATUS      ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+backup-10-04   Completed   0        0          2024-06-15 10:04:10 +0200 CEST   29d       default            <none>
+backup-10-05   Completed   0        0          2024-06-15 10:05:05 +0200 CEST   29d       default            <none>
+```

@@ -1,0 +1,29 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: test-dynamic-volume-claim
+  namespace: test-rbd
+spec:
+  storageClassName: csi-rbd-sc
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  namespace: test-rbd
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - name: nfs-server
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: nfs-server
+    persistentVolumeClaim:
+      claimName: test-dynamic-volume-claim

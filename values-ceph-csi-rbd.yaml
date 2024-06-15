@@ -1,0 +1,16 @@
+csiConfig:
+  - clusterID: "7d2b3cca-f1eb-11ee-a886-593bc87d3824"
+    monitors:
+      - "172.26.0.239:6789"
+
+storageClass:
+  create: true
+  name: csi-rbd-sc
+  clusterID: 7d2b3cca-f1eb-11ee-a886-593bc87d3824
+  pool: pool-k8s
+
+secret:
+  create: true
+  name: csi-rbd-secret
+  userID: k8s
+  userKey: AQB6Jm1mQz0hHBAAUEP8Fa2Kuk3s5SmRRPtFJQ==
