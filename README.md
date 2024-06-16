@@ -7,7 +7,8 @@
 * [Backups con Restic y MinIO](#id6)
 * [Instalación de HELMS - NFS + KPS](#id7)
 * [Instalación de Velero](#id8)
-* [Instalación de CEPH RBD](#id9)
+* [Instalación de CEPH RBD (Velero)](#id9)
+* [Velero Backup Storage Locations (BSL)](#id10)
 
 # Start / Stop VM <div id='id1' />
 
@@ -1098,8 +1099,7 @@ Accedemos a la consola
 * Username: admin
 * Password: superpassword
 
-
-# Instalación de CEPH RBD <div id='id9' />
+# Instalación de CEPH RBD (Velero) <div id='id9' />
 
 
 Partimos de la base que tenemos un Ceph (AllInOne) montado y funcionando:
@@ -1273,3 +1273,61 @@ NAME           STATUS      ERRORS   WARNINGS   CREATED                          
 backup-10-04   Completed   0        0          2024-06-15 10:04:10 +0200 CEST   29d       default            <none>
 backup-10-05   Completed   0        0          2024-06-15 10:05:05 +0200 CEST   29d       default            <none>
 ```
+
+# Velero Backup Storage Locations (BSL) <div id='id10' />
+
+Es este apartado realizaremos backups de cada cliente en su correspondiente bucket, el cual está ubicado en un sólo MinIO
+
+Por defecto sólo tenemos este backup:
+
+```
+root@diba-master:~# velero backup-location get
+NAME      PROVIDER   BUCKET/PREFIX   PHASE       LAST VALIDATED                   ACCESS MODE   DEFAULT
+default   aws        velero          Available   2024-06-16 09:04:11 +0200 CEST   ReadWrite     true
+```
+
+Accederemos a la consola de MinIO y crearemos dos backups más:
+* batman
+* robin
+
+Accedemos a la consola
+* URL: [http://172.26.0.196:9001/](http://172.26.0.196:9001)
+* Username: admin
+* Password: superpassword
+
+
+![alt text](images/MinIO-batman-y-robin.png)
+
+```
+root@diba-master:~# velero backup-location create batman \
+--provider aws \
+--bucket batman \
+--config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000
+
+root@diba-master:~# velero backup-location create robin \
+--provider aws \
+--bucket robin \
+--config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000
+```
+
+```
+root@diba-master:~# velero backup-location get
+NAME      PROVIDER   BUCKET/PREFIX   PHASE       LAST VALIDATED                   ACCESS MODE   DEFAULT
+batman    aws        batman          Available   2024-06-16 09:18:44 +0200 CEST   ReadWrite
+default   aws        velero          Available   2024-06-16 09:19:11 +0200 CEST   ReadWrite     true
+robin     aws        robin           Available   2024-06-16 09:19:45 +0200 CEST   ReadWrite
+```
+
+```
+root@diba-master:~# velero backup create "backup-$(date +"%H-%M")" \
+--include-namespaces test-rbd \
+--include-resources pvc,pv \
+--default-volumes-to-fs-backup \
+--storage-location batman
+
+root@diba-master:~# velero backup get
+NAME           STATUS      ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+backup-09-20   Completed   0        0          2024-06-16 09:20:29 +0200 CEST   29d       batman             <none>
+```
+
+![alt text](images/MinIO-batman.png)
