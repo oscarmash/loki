@@ -1279,7 +1279,7 @@ backup-10-05   Completed   0        0          2024-06-15 10:05:05 +0200 CEST   
 Es este apartado realizaremos un backup en un storage diferente del "default", que es el que creamos cuando desplegamos Velero.
 Cabe destacar que todos los buckets están hechos en el mismo MinIO.... vamos que sólo hay un MinIO
 
-Por defecto sólo tenemos este backup:
+Por defecto sólo tenemos este backup-location:
 
 ```
 root@diba-master:~# velero backup-location get
@@ -1287,7 +1287,7 @@ NAME      PROVIDER   BUCKET/PREFIX   PHASE       LAST VALIDATED                 
 default   aws        velero          Available   2024-06-16 09:04:11 +0200 CEST   ReadWrite     true
 ```
 
-Accederemos a la consola de MinIO y crearemos dos buckets más, dentro de nuestro MinIO:
+Accederemos a la consola de MinIO y crearemos dos buckets más, dentro de nuestro MinIO, que se llamaran:
 * batman
 * robin
 
@@ -1299,18 +1299,18 @@ Accedemos a la consola
 
 ![alt text](images/MinIO-batman-y-robin.png)
 
-Le indicaremos a Velero la existencia de los dos buckets: batman y robin:
+Le indicaremos a Velero la existencia de los dos nuevos buckets: batman y robin
 
 ```
 root@diba-master:~# velero backup-location create batman \
 --provider aws \
---bucket batman \
---config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000
+--config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000 \
+--bucket batman
 
 root@diba-master:~# velero backup-location create robin \
 --provider aws \
---bucket robin \
---config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000
+--config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000 \
+--bucket robin
 ```
 
 Verificemos que los dos buckets hayan pasado la "PHASE" y estén "Available"
