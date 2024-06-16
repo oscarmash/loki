@@ -1,0 +1,38 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mysql-data
+  namespace: test-mysql-hooks
+spec:
+  storageClassName: csi-rbd-sc
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql
+  namespace: test-mysql-hooks
+  labels:
+    name: mysql
+  annotations:
+    pre.hook.backup.velero.io/command: '["mysql", "--password=r00tme_2024", "-e", "FLUSH TABLES WITH READ LOCK"]'
+    post.hook.backup.velero.io/command: '["mysql", "--password=r00tme_2024", "-e", "UNLOCK TABLES"]'
+    backup.velero.io/backup-volumes: mysql-data
+spec:
+  containers:
+    - name: mysql
+      image: mysql:8.0.32
+      env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: r00tme_2024
+      volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+  volumes:
+    - name: mysql-data
+      persistentVolumeClaim:
+        claimName: mysql-data

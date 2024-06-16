@@ -9,6 +9,7 @@
 * [Instalación de Velero](#id8)
 * [Instalación de CEPH RBD (Velero)](#id9)
 * [Velero Backup Storage Locations (BSL)](#id10)
+* [Velero Backup Hooks](#id11)
 
 # Start / Stop VM <div id='id1' />
 
@@ -19,7 +20,71 @@ $ cd ilba/kubespray-diba
 ## Arrancar equipos
 
 ```
-ssh root@172.26.0.71 -C "qm start 9191 && qm start 9192" && ssh root@172.26.0.72 -C "qm start 9193 && qm start 9194" && ssh root@172.26.0.72 -C "qm start 144"
+$ cat arrancar_k8s_diba.sh
+#!/bin/bash
+
+COLOR=$(tput setaf 2)
+NC=$(tput sgr0)
+
+clear
+
+date
+
+
+ssh root@172.26.0.72 -C "qm start 9196" 2> >(grep -v "Permanently added" 1>&2)
+printf "\n%s\n"  "${COLOR}Server diba-minio.ilba.cat is back online${NC}"
+echo ""
+
+ssh root@172.26.0.71 -C "qm start 9195" 2> >(grep -v "Permanently added" 1>&2)
+printf "\n%s\n"  "${COLOR}Server diba-nfs.ilba.cat is back online${NC}"
+echo ""
+
+printf "%s" "${COLOR}Waiting for diba-minio.ilba.cat ...${NC}"
+while ! ping -c 1 -n -w 1 172.26.0.196 &> /dev/null
+do
+    printf "%c" "${COLOR}.${NC}"
+done
+echo ""
+printf "\n%s\n"  "${COLOR}Server diba-minio.ilba.cat is back online${NC}"
+
+
+
+ssh root@172.26.0.72 -C "qm start 9239" 2> >(grep -v "Permanently added" 1>&2)
+printf "\n%s\n"  "${COLOR}Server ceph-aio.ilba.cat is back online${NC}"
+echo ""
+
+printf "%s" "${COLOR}Waiting for ceph-aio.ilba.cat ...${NC}"
+while ! ping -c 1 -n -w 1 172.26.0.239 &> /dev/null
+do
+    printf "%c" "${COLOR}.${NC}"
+done
+echo ""
+printf "\n%s\n"  "${COLOR}Server ceph-aio.ilba.cat is back online${NC}"
+
+sleep 300
+
+ssh root@172.26.0.71 -C "qm start 9191" 2> >(grep -v "Permanently added" 1>&2)
+printf "\n%s\n"  "${COLOR}Server diba-master.ilba.cat is back online${NC}"
+echo ""
+
+ssh root@172.26.0.71 -C "qm start 9192" 2> >(grep -v "Permanently added" 1>&2)
+printf "\n%s\n"  "${COLOR}Server diba-master-1.ilba.cat is back online${NC}"
+echo ""
+
+ssh root@172.26.0.72 -C "qm start 9193" 2> >(grep -v "Permanently added" 1>&2)
+printf "\n%s\n"  "${COLOR}Server diba-master-2.ilba.cat is back online${NC}"
+echo ""
+
+ssh root@172.26.0.72 -C "qm start 9194" 2> >(grep -v "Permanently added" 1>&2)
+printf "\n%s\n"  "${COLOR}Server diba-master-3.ilba.cat is back online${NC}"
+echo ""
+
+
+date
+
+echo ""
+printf "Conectate al equipo: \033[0;33mssh 172.26.0.191\033[0m\n"
+echo ""
 ```
 
 ## Para equipos
@@ -898,6 +963,42 @@ Verificamos que no haya ningún error:  [http://kps-prometheus.ilba.cat/targets?
 
 # Instalación de Velero <div id='id8' />
 
+## Documentación
+
+Documentación encontrada:
+
+* Velero is an open-source backup solution for Kubernetes, maintained by VMWare-Tanzu.
+* Velero backs-up Kubernetes resources and PV’s data into a backup storage location like AWS S3 bucket, or any cloud object storage. It uses restic or Kopia (Starting from velero 1.10) tool to upload data inside a persistent volume to object storage.
+* Using the appropriate CSI driver for your storage provides additional features like efficient snapshots and clones.
+
+Notas importantes  de Velero:
+* No hace backups de:
+  - CRD's
+  - RBAC's
+* No es application-aware, por eso se usa los Backup Hooks
+* Para instalar se puede usar un HELM, pero la documentación oficial indica usar el binario
+
+Nuestro CSI ha de tener esto:
+
+* External Snapshotter
+* VolumeSnapshotClass CRD
+
+```
+root@diba-master:~# kubectl get crd | grep volumesnapshot
+volumesnapshotclasses.snapshot.storage.k8s.io         2024-06-14T05:41:38Z
+volumesnapshotcontents.snapshot.storage.k8s.io        2024-06-14T05:41:38Z
+volumesnapshotlocations.velero.io                     2024-06-14T17:20:46Z
+volumesnapshots.snapshot.storage.k8s.io               2024-06-14T05:41:38Z
+```
+
+```
+root@diba-master:~# kubectl api-resources | grep snapshot.storage
+volumesnapshotclasses             vsclass,vsclasses   snapshot.storage.k8s.io/v1             false        VolumeSnapshotClass
+volumesnapshotcontents            vsc,vscs            snapshot.storage.k8s.io/v1             false        VolumeSnapshotContent
+volumesnapshots                   vs                  snapshot.storage.k8s.io/v1             true         VolumeSnapshot
+```
+
+
 ## Montaje de MinIO (por si no lo tenemos)
 
 Recordemos que en Proxmox, la CPU ha de ser: "x86-64-v2-AES"
@@ -935,35 +1036,6 @@ Accedemos a la consola
 Crearemos el bucket:
 
 ![alt text](images/MinIO-external-create-bucket.png)
-
-
-## Documenatción
-
-Documentación encontrada:
-
-* Velero is an open-source backup solution for Kubernetes, maintained by VMWare-Tanzu.
-* Velero backs-up Kubernetes resources and PV’s data into a backup storage location like AWS S3 bucket, or any cloud object storage. It uses restic or Kopia (Starting from velero 1.10) tool to upload data inside a persistent volume to object storage.
-* Using the appropriate CSI driver for your storage provides additional features like efficient snapshots and clones.
-
-Nuestro CSI ha de tener esto:
-
-* External Snapshotter
-* VolumeSnapshotClass CRD
-
-```
-root@diba-master:~# kubectl get crd | grep volumesnapshot
-volumesnapshotclasses.snapshot.storage.k8s.io         2024-06-14T05:41:38Z
-volumesnapshotcontents.snapshot.storage.k8s.io        2024-06-14T05:41:38Z
-volumesnapshotlocations.velero.io                     2024-06-14T17:20:46Z
-volumesnapshots.snapshot.storage.k8s.io               2024-06-14T05:41:38Z
-```
-
-```
-root@diba-master:~# kubectl api-resources | grep snapshot.storage
-volumesnapshotclasses             vsclass,vsclasses   snapshot.storage.k8s.io/v1             false        VolumeSnapshotClass
-volumesnapshotcontents            vsc,vscs            snapshot.storage.k8s.io/v1             false        VolumeSnapshotContent
-volumesnapshots                   vs                  snapshot.storage.k8s.io/v1             true         VolumeSnapshot
-```
 
 ## Instalación de Velero
 
@@ -1338,3 +1410,113 @@ backup-09-20   Completed   0        0          2024-06-16 09:20:29 +0200 CEST   
 ```
 
 ![alt text](images/MinIO-batman.png)
+
+# Velero Backup Hooks <div id='id11' />
+
+```
+root@diba-master:~# kubectl create ns test-mysql-hooks
+
+root@diba-master:~# vim test-mysql-hooks.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mysql-data
+  namespace: test-mysql-hooks
+spec:
+  storageClassName: csi-rbd-sc
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql
+  namespace: test-mysql-hooks
+  labels:
+    name: mysql
+spec:
+  containers:
+    - name: mysql
+      image: mysql:8.0.32
+      env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: r00tme_2024
+      volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+  volumes:
+    - name: mysql-data
+      persistentVolumeClaim:
+        claimName: mysql-data
+
+root@diba-master:~# kubectl apply -f test-mysql-hooks.yaml
+
+root@diba-master:~# kubectl -n test-mysql-hooks get pods
+NAME    READY   STATUS    RESTARTS   AGE
+mysql   1/1     Running   0          41s
+
+root@diba-master:~# kubectl -n test-mysql-hooks exec -it mysql -- df -h | grep rbd
+/dev/rbd0       2.0G  200M  1.7G  11% /var/lib/mysql
+```
+
+Insertaremos datos en la BBDD:
+
+```
+root@diba-master:~# kubectl -n test-mysql-hooks exec -it mysql -- mysql -u root -p
+    r00tme_2024
+
+mysql> CREATE DATABASE agenda;
+mysql> USE agenda;
+mysql> CREATE TABLE datos (id INT, nombre VARCHAR(20), apellido VARCHAR(20));
+mysql> INSERT INTO datos (id,nombre,apellido) VALUES(1,"Oscar","Mas");
+mysql> INSERT INTO datos (id,nombre,apellido) VALUES(2,"Nuria","Ilari");
+
+mysql> SELECT * FROM agenda.datos;
++------+--------+----------+
+| id   | nombre | apellido |
++------+--------+----------+
+|    1 | Oscar  | Mas      |
+|    2 | Nuria  | Ilari    |
++------+--------+----------+
+2 rows in set (0.00 sec)
+
+mysql> quit
+```
+
+En este punto añadiremos las "Annotations"
+
+```
+root@diba-master:~# cat test-mysql-hooks.yaml
+
+root@diba-master:~# kubectl apply -f test-mysql-hooks.yaml
+
+root@diba-master:~# kubectl -n test-mysql-hooks describe pod mysql | grep velero
+Annotations:      backup.velero.io/backup-volumes: mysql-data
+                  post.hook.backup.velero.io/command: ["mysql", "--password=r00tme_2024", "-e", "UNLOCK TABLES"]
+                  pre.hook.backup.velero.io/command: ["mysql", "--password=r00tme_2024", "-e", "FLUSH TABLES WITH READ LOCK"]
+```
+
+```
+root@diba-master:~# velero backup create "backup-$(date +"%H-%M")" \
+--include-namespaces test-mysql-hooks \
+--default-volumes-to-fs-backup
+
+root@diba-master:~# velero backup get
+NAME           STATUS       ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+backup-13-21   InProgress   0        0          2024-06-16 13:21:39 +0200 CEST   29d       default            <none>
+
+root@diba-master:~# velero backup logs backup-13-21
+time="2024-06-16T11:21:41Z" level=info msg="running exec hook" backup=velero/backup-13-21 hookCommand="[mysql --password=r00tme_2024 -e FLUSH TABLES WITH READ LOCK]" hookContainer=mysql hookName="<from-annotation>" hookOnError=Fail hookPhase=pre hookSource=annotation hookTimeout="{30s}" hookType=exec logSource="pkg/podexec/pod_command_executor.go:133" name=mysql namespace=test-mysql-hooks resource=pods
+time="2024-06-16T11:21:41Z" level=info msg="stdout: " backup=velero/backup-13-21 hookCommand="[mysql --password=r00tme_2024 -e FLUSH TABLES WITH READ LOCK]" hookContainer=mysql hookName="<from-annotation>" hookOnError=Fail hookPhase=pre hookSource=annotation hookTimeout="{30s}" hookType=exec logSource="pkg/podexec/pod_command_executor.go:180" name=mysql namespace=test-mysql-hooks resource=pods
+time="2024-06-16T11:21:41Z" level=info msg="stderr: mysql: [Warning] Using a password on the command line interface can be insecure.\n" backup=velero/backup-13-21 hookCommand="[mysql --password=r00tme_2024 -e FLUSH TABLES WITH READ LOCK]" hookContainer=mysql hookName="<from-annotation>" hookOnError=Fail hookPhase=pre hookSource=annotation hookTimeout="{30s}" hookType=exec logSource="pkg/podexec/pod_command_executor.go:181" name=mysql namespace=test-mysql-hooks resource=pods
+time="2024-06-16T11:21:52Z" level=info msg="running exec hook" backup=velero/backup-13-21 hookCommand="[mysql --password=r00tme_2024 -e UNLOCK TABLES]" hookContainer=mysql hookName="<from-annotation>" hookOnError=Fail hookPhase=post hookSource=annotation hookTimeout="{30s}" hookType=exec logSource="pkg/podexec/pod_command_executor.go:133" name=mysql namespace=test-mysql-hooks resource=pods
+time="2024-06-16T11:21:53Z" level=info msg="stdout: " backup=velero/backup-13-21 hookCommand="[mysql --password=r00tme_2024 -e UNLOCK TABLES]" hookContainer=mysql hookName="<from-annotation>" hookOnError=Fail hookPhase=post hookSource=annotation hookTimeout="{30s}" hookType=exec logSource="pkg/podexec/pod_command_executor.go:180" name=mysql namespace=test-mysql-hooks resource=pods
+time="2024-06-16T11:21:53Z" level=info msg="stderr: mysql: [Warning] Using a password on the command line interface can be insecure.\n" backup=velero/backup-13-21 hookCommand="[mysql --password=r00tme_2024 -e UNLOCK TABLES]" hookContainer=mysql hookName="<from-annotation>" hookOnError=Fail hookPhase=post hookSource=annotation hookTimeout="{30s}" hookType=exec logSource="pkg/podexec/pod_command_executor.go:181" name=mysql namespace=test-mysql-hooks resource=pods
+
+root@diba-master:~# velero backup get
+NAME           STATUS      ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+backup-13-21   Completed   0        0          2024-06-16 13:21:39 +0200 CEST   29d       default            <none>
+```
