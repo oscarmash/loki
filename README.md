@@ -1276,7 +1276,8 @@ backup-10-05   Completed   0        0          2024-06-15 10:05:05 +0200 CEST   
 
 # Velero Backup Storage Locations (BSL) <div id='id10' />
 
-Es este apartado realizaremos backups de cada cliente en su correspondiente bucket, el cual está ubicado en un sólo MinIO
+Es este apartado realizaremos un backup en un storage diferente del "default", que es el que creamos cuando desplegamos Velero.
+Cabe destacar que todos los buckets están hechos en el mismo MinIO.... vamos que sólo hay un MinIO
 
 Por defecto sólo tenemos este backup:
 
@@ -1286,7 +1287,7 @@ NAME      PROVIDER   BUCKET/PREFIX   PHASE       LAST VALIDATED                 
 default   aws        velero          Available   2024-06-16 09:04:11 +0200 CEST   ReadWrite     true
 ```
 
-Accederemos a la consola de MinIO y crearemos dos backups más:
+Accederemos a la consola de MinIO y crearemos dos buckets más, dentro de nuestro MinIO:
 * batman
 * robin
 
@@ -1297,6 +1298,8 @@ Accedemos a la consola
 
 
 ![alt text](images/MinIO-batman-y-robin.png)
+
+Le indicaremos a Velero la existencia de los dos buckets: batman y robin:
 
 ```
 root@diba-master:~# velero backup-location create batman \
@@ -1310,6 +1313,8 @@ root@diba-master:~# velero backup-location create robin \
 --config region=minio,s3ForcePathStyle="true",s3Url=http://172.26.0.196:9000
 ```
 
+Verificemos que los dos buckets hayan pasado la "PHASE" y estén "Available"
+
 ```
 root@diba-master:~# velero backup-location get
 NAME      PROVIDER   BUCKET/PREFIX   PHASE       LAST VALIDATED                   ACCESS MODE   DEFAULT
@@ -1317,6 +1322,8 @@ batman    aws        batman          Available   2024-06-16 09:18:44 +0200 CEST 
 default   aws        velero          Available   2024-06-16 09:19:11 +0200 CEST   ReadWrite     true
 robin     aws        robin           Available   2024-06-16 09:19:45 +0200 CEST   ReadWrite
 ```
+
+Lanzaremos un backup contra el bucket de batman y verificaremos que se han copiado los datos:
 
 ```
 root@diba-master:~# velero backup create "backup-$(date +"%H-%M")" \
