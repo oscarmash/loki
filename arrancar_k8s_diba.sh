@@ -38,7 +38,8 @@ done
 echo ""
 printf "\n%s\n"  "${COLOR}Server ceph-aio.ilba.cat is back online${NC}"
 
-sleep 300
+# 4 minutos
+sleep 240
 
 ssh root@172.26.0.71 -C "qm start 9191" 2> >(grep -v "Permanently added" 1>&2)
 printf "\n%s\n"  "${COLOR}Server diba-master.ilba.cat is back online${NC}"

@@ -10,6 +10,7 @@
 * [Instalación de CEPH RBD (Velero)](#id9)
 * [Velero Backup Storage Locations (BSL)](#id10)
 * [Velero Backup Hooks](#id11)
+* [Velero Restore](#id12)
 
 # Start / Stop VM <div id='id1' />
 
@@ -1519,4 +1520,81 @@ time="2024-06-16T11:21:53Z" level=info msg="stderr: mysql: [Warning] Using a pas
 root@diba-master:~# velero backup get
 NAME           STATUS      ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
 backup-13-21   Completed   0        0          2024-06-16 13:21:39 +0200 CEST   29d       default            <none>
+```
+
+
+# Velero Restore <div id='id12' />
+
+Revisaremos que todo esté correcto:
+
+```
+root@diba-master:~# kubectl -n test-mysql-hooks get pods
+NAME    READY   STATUS    RESTARTS      AGE
+mysql   1/1     Running   1 (19h ago)   21h
+
+root@diba-master:~# kubectl -n test-mysql-hooks exec -it mysql -- mysql -u root -p
+    r00tme_2024
+
+mysql> SELECT * FROM agenda.datos;
++------+--------+----------+
+| id   | nombre | apellido |
++------+--------+----------+
+|    1 | Oscar  | Mas      |
+|    2 | Nuria  | Ilari    |
++------+--------+----------+
+2 rows in set (0.08 sec)
+
+mysql> quit
+```
+
+Lanzaremos un backup:
+
+```
+velero backup create "backup-$(date +"%H-%M")" \
+--include-namespaces test-mysql-hooks \
+--default-volumes-to-fs-backup
+
+root@diba-master:~# velero backup get
+NAME           STATUS      ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+backup-09-30   Completed   0        0          2024-06-17 09:30:32 +0200 CEST   29d       default            <none>
+```
+
+Restauraremos en otro NS, para poder coger los datos:
+
+```
+root@diba-master:~# velero restore create --from-backup backup-09-30 --namespace-mappings test-mysql-hooks:restore-mysql-hooks
+```
+
+Creamos una fila en el original, para verificar que todo sea correcto y verificaremos al restauración:
+
+```
+root@diba-master:~# kubectl -n test-mysql-hooks exec -it mysql -- mysql -u root -p
+    r00tme_2024
+
+mysql> INSERT INTO agenda.datos (id,nombre,apellido) VALUES(1,"Abril","Mas");
+mysql> SELECT * FROM agenda.datos;
++------+--------+----------+
+| id   | nombre | apellido |
++------+--------+----------+
+|    1 | Oscar  | Mas      |
+|    2 | Nuria  | Ilari    |
+|    1 | Abril  | Mas      |
++------+--------+----------+
+3 rows in set (0.00 sec)
+
+mysql> quit
+
+root@diba-master:~# kubectl -n restore-mysql-hooks exec -it mysql -- mysql -u root -p
+    r00tme_2024
+
+mysql> SELECT * FROM agenda.datos;
++------+--------+----------+
+| id   | nombre | apellido |
++------+--------+----------+
+|    1 | Oscar  | Mas      |
+|    2 | Nuria  | Ilari    |
++------+--------+----------+
+2 rows in set (0.01 sec)
+
+mysql> quit
 ```
