@@ -1571,14 +1571,14 @@ Creamos una fila en el original, para verificar que todo sea correcto y verifica
 root@diba-master:~# kubectl -n test-mysql-hooks exec -it mysql -- mysql -u root -p
     r00tme_2024
 
-mysql> INSERT INTO agenda.datos (id,nombre,apellido) VALUES(1,"Abril","Mas");
+mysql> INSERT INTO agenda.datos (id,nombre,apellido) VALUES(3,"Abril","Mas");
 mysql> SELECT * FROM agenda.datos;
 +------+--------+----------+
 | id   | nombre | apellido |
 +------+--------+----------+
 |    1 | Oscar  | Mas      |
 |    2 | Nuria  | Ilari    |
-|    1 | Abril  | Mas      |
+|    3 | Abril  | Mas      |
 +------+--------+----------+
 3 rows in set (0.00 sec)
 
