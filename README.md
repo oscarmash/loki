@@ -1,9 +1,10 @@
-# **Tacle of Contents**
+# **Table of Contents**
 * [Cosas personales](#id1)
 * [Instalación de K8S](#id2)
 * [Instalación de HELMS - Bootstrap](#id3)
   * [MetalLB](#id31)
-  * [nginx](#id32)
+  * [Ingress nginx](#id32)
+  * [Ingress nginx defaultBackend](#id33)
 * [Instalación de HELMS - Stack Loki](#id4)
 * [Logs customs](#id5)
 * [Backups con Restic y MinIO](#id6)
@@ -176,7 +177,7 @@ EOF
 root@diba-master:~# kubectl apply -f crd-ip.yaml
 ```
 
-# nginx <div id='id32' />
+# Ingress nginx <div id='id32' />
 
 ```
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx && helm repo update
@@ -276,6 +277,108 @@ root@diba-master:~# kubectl apply -f testing.yaml
 Verificamos que funcione [la web de testing](http://www.dominio.cat):
 
 ![alt text](images/kubernetes-Hello-world.png)
+
+
+# Ingress nginx defaultBackend <div id='id33' />
+
+```
+root@diba-master:~# cat custom_error.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-error-pages
+  namespace: ingress-nginx
+data:
+  404: |
+    <!DOCTYPE html>
+    <html>
+      <head><title>ERROR CUSTOM 404</title></head>
+      <body>ERROR CUSTOM 404</body>
+    </html>
+  503: |
+    <!DOCTYPE html>
+    <html>
+      <head><title>ERROR CUSTOM 503</title></head>
+      <body>ERROR CUSTOM 503</body>
+    </html>
+
+root@diba-master:~# kubectl apply -f custom_error.yaml
+```
+
+La imagen del contenedor, la hemos sacado de [aquí](https://github.com/kubernetes/k8s.io/blob/main/k8s.gcr.io/images/k8s-staging-ingress-nginx/images.yaml#L229)
+
+Hemos añadido al values del nginx, la parte de "defaultBackend"
+
+```
+root@diba-master:~# cat values-nginx.yaml
+controller:
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: "Local"
+  publishService:
+    enabled: true
+  kind: DaemonSet
+defaultBackend:
+  enabled: true
+  image:
+    registry: registry.k8s.io
+    image: ingress-nginx/nginx-errors
+    tag: "v20230312-helm-chart-4.5.2-28-g66a760794"
+  extraVolumes:
+  - name: custom-error-pages
+    configMap:
+      name: custom-error-pages
+      items:
+      - key: "404"
+        path: "404.html"
+      - key: "503"
+        path: "503.html"
+  extraVolumeMounts:
+  - name: custom-error-pages
+    mountPath: /www
+```
+
+```
+helm upgrade --install \
+ingress-nginx ingress-nginx/ingress-nginx \
+--create-namespace \
+--namespace ingress-nginx \
+--version=4.7.1 \
+-f values-nginx.yaml
+```
+
+Típicas verificaciones:
+
+```
+root@diba-master:~# helm -n ingress-nginx ls
+NAME            NAMESPACE       REVISION        UPDATED                                         STATUS          CHART                   APP VERSION
+ingress-nginx   ingress-nginx   2               2024-06-22 06:56:46.644130825 +0200 CEST        deployed        ingress-nginx-4.7.1     1.8.1
+
+root@diba-master:~# kubectl -n ingress-nginx get pods
+NAME                                            READY   STATUS    RESTARTS   AGE
+ingress-nginx-controller-pnm6m                  1/1     Running   0          66s
+ingress-nginx-controller-q72cl                  1/1     Running   0          12s
+ingress-nginx-controller-r4pw4                  1/1     Running   0          34s
+ingress-nginx-defaultbackend-55bcbccd58-4276g   1/1     Running   0          78s
+```
+
+No sabemos como arreglar el error del contenedor del "defaultbackend", hemos visto [esto](https://github.com/kubernetes/ingress-nginx/issues/2650#issuecomment-2150506065), pero no saca nada en claro.
+
+```
+root@diba-master:~# curl -s -H "Host: www.dominio.cat" 172.26.0.101
+
+root@diba-master:~# curl -s -H "Host: www.dominio.xxx" 172.26.0.101
+<!DOCTYPE html>
+<html>
+  <head><title>ERROR CUSTOM 404</title></head>
+  <body>ERROR CUSTOM 404</body>
+</html>
+
+root@diba-master:~# kubectl -n ingress-nginx logs -f ingress-nginx-defaultbackend-55bcbccd58-4276g
+2024/06/22 04:59:51 format not specified. Using text/html
+2024/06/22 04:59:51 unexpected error reading return code: strconv.Atoi: parsing "": invalid syntax. Using 404
+2024/06/22 04:59:51 serving custom error response for code 404 and format text/html from file /www/404.html
+```
 
 # Instalación del stack de Loki <div id='id4' />
 
