@@ -2,15 +2,17 @@
 * [Cosas personales](#id1)
 * [Instalación de K8S](#id2)
 * [Instalación de HELMS - Bootstrap](#id3)
+  * [MetalLB](#id31)
+  * [nginx](#id32)
 * [Instalación de HELMS - Stack Loki](#id4)
 * [Logs customs](#id5)
 * [Backups con Restic y MinIO](#id6)
 * [Instalación de HELMS - NFS + KPS](#id7)
 * [Instalación de Velero](#id8)
-* [Instalación de CEPH RBD (Velero)](#id9)
-* [Velero Backup Storage Locations (BSL)](#id10)
-* [Velero Backup Hooks](#id11)
-* [Velero Restore](#id12)
+  * [Instalación de CEPH RBD (Velero)](#id81)
+  * [Velero Backup Storage Locations (BSL)](#id82)
+  * [Velero Backup Hooks](#id83)
+  * [Velero Restore](#id84)
 
 # Start / Stop VM <div id='id1' />
 
@@ -117,7 +119,7 @@ diba-master-2   Ready    <none>          3m3s    v1.28.6   172.26.0.193   <none>
 diba-master-3   Ready    <none>          3m1s    v1.28.6   172.26.0.194   <none>        Debian GNU/Linux 12 (bookworm)   6.1.0-21-amd64   containerd://1.7.1
 ```
 
-# Instalación de HELMS <div id='id3' />
+# Instalación de HELMS - Bootstrap <div id='id3' />
 
 ## Instalar Helm
 
@@ -128,7 +130,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.
 apt-get update && apt-get install helm
 ```
 
-## metallb
+# MetalLB <div id='id31' />
 
 ```
 helm repo add metallb https://metallb.github.io/metallb && helm repo update
@@ -174,7 +176,7 @@ EOF
 root@diba-master:~# kubectl apply -f crd-ip.yaml
 ```
 
-## nginx
+# nginx <div id='id32' />
 
 ```
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx && helm repo update
@@ -1172,7 +1174,7 @@ Accedemos a la consola
 * Username: admin
 * Password: superpassword
 
-# Instalación de CEPH RBD (Velero) <div id='id9' />
+# Instalación de CEPH RBD (Velero) <div id='id81' />
 
 
 Partimos de la base que tenemos un Ceph (AllInOne) montado y funcionando:
@@ -1347,7 +1349,7 @@ backup-10-04   Completed   0        0          2024-06-15 10:04:10 +0200 CEST   
 backup-10-05   Completed   0        0          2024-06-15 10:05:05 +0200 CEST   29d       default            <none>
 ```
 
-# Velero Backup Storage Locations (BSL) <div id='id10' />
+# Velero Backup Storage Locations (BSL) <div id='id82' />
 
 Es este apartado realizaremos un backup en un storage diferente del "default", que es el que creamos cuando desplegamos Velero.
 Cabe destacar que todos los buckets están hechos en el mismo MinIO.... vamos que sólo hay un MinIO
@@ -1412,7 +1414,7 @@ backup-09-20   Completed   0        0          2024-06-16 09:20:29 +0200 CEST   
 
 ![alt text](images/MinIO-batman.png)
 
-# Velero Backup Hooks <div id='id11' />
+# Velero Backup Hooks <div id='id83' />
 
 ```
 root@diba-master:~# kubectl create ns test-mysql-hooks
@@ -1523,7 +1525,7 @@ backup-13-21   Completed   0        0          2024-06-16 13:21:39 +0200 CEST   
 ```
 
 
-# Velero Restore <div id='id12' />
+# Velero Restore <div id='id84' />
 
 Revisaremos que todo esté correcto:
 
